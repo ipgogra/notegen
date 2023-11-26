@@ -1,0 +1,84 @@
+import os
+import pretty_midi
+import numpy as np
+from sklearn.model_selection import train_test_split
+
+
+def get_notes_from_midi(midi_path):
+    """
+    Extracts notes and their start times from a MIDI file.
+    """
+    midi_data = pretty_midi.PrettyMIDI(midi_path)
+    notes = []
+
+    for instrument in midi_data.instruments:
+        # Ignore drum tracks
+        if not instrument.is_drum:
+            for note in instrument.notes:
+                notes.append((note.pitch, note.start))
+
+    return notes
+
+
+def prepare_sequences(notes, sequence_length):
+    """
+    Prepare the sequences used by the Neural Network.
+    """
+    # Sort the notes by start time
+    notes.sort(key=lambda x: x[1])
+
+    # Extract only the pitches
+    pitches = [note[0] for note in notes]
+
+    # Create input sequences and their corresponding outputs
+    input_sequences = []
+    output_sequences = []
+    for i in range(0, len(pitches) - sequence_length):
+        input_seq = pitches[i : i + sequence_length]
+        output_seq = pitches[i + sequence_length]
+        input_sequences.append(input_seq)
+        output_sequences.append(output_seq)
+
+    return input_sequences, output_sequences
+
+
+def one_hot_encode(sequences, n_unique_notes):
+    """
+    One-hot encodes the sequences.
+    """
+    one_hot_encoded = np.zeros(
+        (len(sequences), len(sequences[0]), n_unique_notes), dtype=np.bool
+    )
+
+    for i, sequence in enumerate(sequences):
+        for j, note_number in enumerate(sequence):
+            one_hot_encoded[i, j, note_number] = 1
+
+    return one_hot_encoded
+
+
+# Parameters
+sequence_length = 100
+n_unique_notes = 128  # MIDI notes range from 0 to 127
+
+# Process each MIDI file
+notes = []
+for file in os.listdir("midi_folder"):  # Replace with your MIDI files folder
+    if file.endswith(".mid"):
+        notes.extend(get_notes_from_midi(os.path.join("midi_folder", file)))
+
+# Prepare sequences
+input_sequences, output_sequences = prepare_sequences(notes, sequence_length)
+
+# One-hot encode
+input_sequences_encoded = one_hot_encode(input_sequences, n_unique_notes)
+output_sequences_encoded = np.array(
+    [np.eye(n_unique_notes)[x] for x in output_sequences]
+)
+
+# Split into training and validation sets
+input_train, input_val, output_train, output_val = train_test_split(
+    input_sequences_encoded, output_sequences_encoded, test_size=0.2, random_state=0
+)
+
+print("Training and validation datasets prepared.")
